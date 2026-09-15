@@ -81,8 +81,8 @@ function App() {
                 <Route path="/stock-movements" element={<StockMovements />} />
               </Route>
 
-              {/* Purchase Orders accessible by Admin, Pharmacist, Supplier, and Staff */}
-              <Route element={<ProtectedRoute allowedRoles={['ROLE_ADMIN', 'ROLE_PHARMACIST', 'ROLE_SUPPLIER', 'ROLE_STAFF']} />}>
+              {/* Purchase Orders accessible by Admin, Pharmacist, and Supplier */}
+              <Route element={<ProtectedRoute allowedRoles={['ROLE_ADMIN', 'ROLE_PHARMACIST', 'ROLE_SUPPLIER']} />}>
                 <Route path="/purchase-orders" element={<PurchaseOrders />} />
               </Route>
 

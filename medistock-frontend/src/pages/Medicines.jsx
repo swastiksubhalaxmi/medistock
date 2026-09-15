@@ -66,6 +66,7 @@ const Medicines = () => {
   // Permission Checks: ADMIN and PHARMACIST can modify
   const canModify = user?.roles?.some(role => ['ROLE_ADMIN', 'ROLE_PHARMACIST'].includes(role));
   const isSupplier = user?.roles?.includes('ROLE_SUPPLIER');
+  const isStaff = user?.roles?.includes('ROLE_STAFF') && !user?.roles?.includes('ROLE_ADMIN') && !user?.roles?.includes('ROLE_PHARMACIST');
 
   // Supplier medicine management modal state
   const [supplierModalOpen, setSupplierModalOpen] = useState(false);
@@ -632,7 +633,7 @@ const Medicines = () => {
                         {getSortIcon('CATEGORY')}
                       </div>
                     </th>
-                    <th className="col-price" style={{ position: 'sticky', top: 0, zIndex: 1, backgroundColor: '#0f172a' }}>{isSupplier ? 'Price' : 'Purchase / Selling Price'}</th>
+                    <th className="col-price" style={{ position: 'sticky', top: 0, zIndex: 1, backgroundColor: '#0f172a' }}>{isSupplier ? 'Price' : (isStaff ? 'Selling Price' : 'Purchase / Selling Price')}</th>
                     <th
                       className="col-stock"
                       onClick={() => handleSort('QUANTITY')}
@@ -672,6 +673,8 @@ const Medicines = () => {
                       <td>
                         {isSupplier ? (
                           <strong>{formatCurrency(med.price)}</strong>
+                        ) : isStaff ? (
+                          <strong>{med.sellingPrice != null ? formatCurrency(med.sellingPrice) : (med.price != null ? formatCurrency(med.price) : <span style={{ color: '#f59e0b', fontStyle: 'italic' }}>Unset</span>)}</strong>
                         ) : (
                           <>
                             <div>
@@ -854,19 +857,21 @@ const Medicines = () => {
               </div>
 
               <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="unitPrice">Purchase/Buying Cost (INR)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    id="unitPrice"
-                    name="unitPrice"
-                    value={formData.unitPrice || ''}
-                    onChange={handleInputChange}
-                    placeholder="e.g. 45.00"
-                    disabled={submitting}
-                  />
-                </div>
+                {!isStaff && (
+                  <div className="form-group">
+                    <label htmlFor="unitPrice">Purchase/Buying Cost (INR)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      id="unitPrice"
+                      name="unitPrice"
+                      value={formData.unitPrice || ''}
+                      onChange={handleInputChange}
+                      placeholder="e.g. 45.00"
+                      disabled={submitting}
+                    />
+                  </div>
+                )}
 
                 <div className="form-group">
                   <label htmlFor="sellingPrice">Retail Selling Price (INR) *</label>

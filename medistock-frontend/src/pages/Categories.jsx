@@ -23,6 +23,7 @@ const Categories = () => {
   const { user } = useAuth();
   const isAdmin = user?.roles?.includes('ROLE_ADMIN');
   const isSupplier = user?.roles?.includes('ROLE_SUPPLIER');
+  const isStaff = user?.roles?.includes('ROLE_STAFF') && !user?.roles?.includes('ROLE_ADMIN') && !user?.roles?.includes('ROLE_PHARMACIST');
 
   const [categories, setCategories] = useState([]);
   const [medicines, setMedicines] = useState([]);
@@ -648,10 +649,12 @@ const Categories = () => {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <button className="btn btn-primary" onClick={openCreateModal}>
-          <Plus size={16} />
-          <span>Add Category</span>
-        </button>
+        {!isStaff && (
+          <button className="btn btn-primary" onClick={openCreateModal}>
+            <Plus size={16} />
+            <span>Add Category</span>
+          </button>
+        )}
       </div>
 
       <div className="card">
