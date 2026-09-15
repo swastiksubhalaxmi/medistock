@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../api/api';
+import { useAuth } from '../context/AuthContext';
 import { 
   FileText, 
   Download, 
@@ -12,16 +13,27 @@ import {
   Pill, 
   Boxes,
   CheckCircle,
-  Filter
+  Filter,
+  History
 } from 'lucide-react';
 
 const Reports = () => {
+  const { user } = useAuth();
+  const isStaff = user?.roles?.includes('ROLE_STAFF') && !user?.roles?.includes('ROLE_ADMIN') && !user?.roles?.includes('ROLE_PHARMACIST');
+
   const [metrics, setMetrics] = useState(null);
   const [medicines, setMedicines] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedReport, setSelectedReport] = useState('INVENTORY_SUMMARY');
+  const [selectedReport, setSelectedReport] = useState(isStaff ? 'SALES_REPORT' : 'INVENTORY_SUMMARY');
   const [activePrintReport, setActivePrintReport] = useState(null);
+
+  useEffect(() => {
+    if (isStaff) {
+      setSelectedReport('SALES_REPORT');
+    }
+  }, [isStaff]);
 
   useEffect(() => {
     const handleAfterPrint = () => {
@@ -43,23 +55,30 @@ const Reports = () => {
   useEffect(() => {
     const fetchReportData = async () => {
       try {
-        const [dashRes, medRes, poRes] = await Promise.all([
-          api.get('/dashboard').catch(() => null),
-          api.get('/medicines').catch(() => null),
-          api.get('/purchase-orders').catch(() => null)
-        ]);
+        if (isStaff) {
+          const salesRes = await api.get('/sales').catch(() => null);
+          if (salesRes && salesRes.data && salesRes.data.success) {
+            setSales(salesRes.data.data || []);
+          }
+        } else {
+          const [dashRes, medRes, poRes] = await Promise.all([
+            api.get('/dashboard').catch(() => null),
+            api.get('/medicines').catch(() => null),
+            api.get('/purchase-orders').catch(() => null)
+          ]);
 
-        if (dashRes && dashRes.data && dashRes.data.success) {
-          setMetrics(dashRes.data.data);
-        }
+          if (dashRes && dashRes.data && dashRes.data.success) {
+            setMetrics(dashRes.data.data);
+          }
 
-        if (medRes && medRes.data) {
-          const list = Array.isArray(medRes.data) ? medRes.data : (medRes.data.data || []);
-          setMedicines(list);
-        }
+          if (medRes && medRes.data) {
+            const list = Array.isArray(medRes.data) ? medRes.data : (medRes.data.data || []);
+            setMedicines(list);
+          }
 
-        if (poRes && poRes.data && poRes.data.success) {
-          setPurchaseOrders(poRes.data.data || []);
+          if (poRes && poRes.data && poRes.data.success) {
+            setPurchaseOrders(poRes.data.data || []);
+          }
         }
       } catch (err) {
         console.error('Error fetching report metrics:', err);
@@ -69,7 +88,7 @@ const Reports = () => {
     };
 
     fetchReportData();
-  }, []);
+  }, [isStaff]);
 
   const handleExportCSV = (type) => {
     const reportTypeToUse = type || selectedReport;
@@ -77,7 +96,21 @@ const Reports = () => {
     let rows = [];
     let filename = 'medistock_report.csv';
 
-    if (reportTypeToUse === 'INVENTORY_SUMMARY') {
+    if (reportTypeToUse === 'SALES_REPORT') {
+      filename = 'medistock_sales_report.csv';
+      headers = ['Invoice Number', 'Date & Time', 'Customer Name', 'Customer Phone', 'Sold By', 'Payment Method', 'Total Amount', 'Discount Amount', 'Final Amount'];
+      rows = sales.map(s => [
+        s.invoiceNumber || 'N/A',
+        s.saleDate ? new Date(s.saleDate).toLocaleString('en-IN') : 'N/A',
+        s.customerName || 'Walk-in Customer',
+        s.customerPhone || 'N/A',
+        s.createdByUsername || 'N/A',
+        s.paymentMethod || 'N/A',
+        s.totalAmount || 0,
+        s.discountAmount || 0,
+        s.finalAmount || 0
+      ]);
+    } else if (reportTypeToUse === 'INVENTORY_SUMMARY') {
       filename = 'medistock_inventory_summary.csv';
       headers = ['Metric', 'Value'];
       rows = [
@@ -122,41 +155,113 @@ const Reports = () => {
     document.body.removeChild(link);
   };
 
-  const reportsList = [
-    {
-      id: 'INVENTORY_SUMMARY',
-      title: 'Full Inventory Telemetry & Asset Report',
-      description: 'Comprehensive audit of total medicines, catalogue valuation, available stock, and supplier counts.',
-      icon: <Boxes size={22} style={{ color: 'var(--primary)' }} />,
-      badge: 'Core Audit'
-    },
-    {
-      id: 'LOW_STOCK',
-      title: 'Low Stock & Restock Priority Audit',
-      description: 'Detailed watchlist of items reaching or falling below safety reorder levels.',
-      icon: <AlertTriangle size={22} style={{ color: 'var(--warning)' }} />,
-      badge: 'Action Required'
-    },
-    {
-      id: 'EXPIRY_REPORT',
-      title: 'Expiry Risk & Shelf-Life Telemetry Report',
-      description: 'Complete breakdown of medicines expiring within 30, 60, 90 days, or already expired.',
-      icon: <Clock size={22} style={{ color: 'var(--danger)' }} />,
-      badge: 'Risk Audit'
-    },
-    {
-      id: 'PURCHASE_ORDERS',
-      title: 'Purchase Orders & Supplier History Report',
-      description: 'Detailed transaction logs of all purchase orders placed with suppliers and delivery statuses.',
-      icon: <ShoppingCart size={22} style={{ color: '#8b5cf6' }} />,
-      badge: 'Procurement'
-    }
-  ];
-
+  const reportsList = isStaff
+    ? [
+        {
+          id: 'SALES_REPORT',
+          title: 'Sales History & Revenue Audit Report',
+          description: 'Detailed audit of sales transactions, customer receipts, payment methods, and revenue totals.',
+          icon: <History size={22} style={{ color: 'var(--primary)' }} />,
+          badge: 'Sales Audit'
+        }
+      ]
+    : [
+        {
+          id: 'INVENTORY_SUMMARY',
+          title: 'Full Inventory Telemetry & Asset Report',
+          description: 'Comprehensive audit of total medicines, catalogue valuation, available stock, and supplier counts.',
+          icon: <Boxes size={22} style={{ color: 'var(--primary)' }} />,
+          badge: 'Core Audit'
+        },
+        {
+          id: 'LOW_STOCK',
+          title: 'Low Stock & Restock Priority Audit',
+          description: 'Detailed watchlist of items reaching or falling below safety reorder levels.',
+          icon: <AlertTriangle size={22} style={{ color: 'var(--warning)' }} />,
+          badge: 'Action Required'
+        },
+        {
+          id: 'EXPIRY_REPORT',
+          title: 'Expiry Risk & Shelf-Life Telemetry Report',
+          description: 'Complete breakdown of medicines expiring within 30, 60, 90 days, or already expired.',
+          icon: <Clock size={22} style={{ color: 'var(--danger)' }} />,
+          badge: 'Risk Audit'
+        },
+        {
+          id: 'PURCHASE_ORDERS',
+          title: 'Purchase Orders & Supplier History Report',
+          description: 'Detailed transaction logs of all purchase orders placed with suppliers and delivery statuses.',
+          icon: <ShoppingCart size={22} style={{ color: '#8b5cf6' }} />,
+          badge: 'Procurement'
+        }
+      ];
 
   const formatCurrency = (val) => {
     if (val === undefined || val === null) return '₹0.00';
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(val);
+  };
+
+  const renderSalesReport = () => {
+    const totalRevenue = sales.reduce((acc, curr) => acc + (curr.finalAmount || 0), 0);
+
+    return (
+      <div className="print-report-portal">
+        <div className="print-report-header">
+          <h1 className="print-report-title">MediStock Inventory Management System</h1>
+          <p className="print-report-meta">
+            <strong>Report:</strong> Sales History & Revenue Audit Report <br />
+            <strong>Generated:</strong> {new Date().toLocaleString('en-IN')} <br />
+            <strong>Data Scope:</strong> Staff Sales Transactions & Revenue Metrics
+          </p>
+        </div>
+
+        <h2 className="print-section-title">Sales Telemetry Summary</h2>
+        <div className="print-grid">
+          <div className="print-card">
+            <div className="print-card-title">Total Sales Transactions</div>
+            <div className="print-card-value">{sales.length}</div>
+          </div>
+          <div className="print-card">
+            <div className="print-card-title">Total Revenue Collected</div>
+            <div className="print-card-value">{formatCurrency(totalRevenue)}</div>
+          </div>
+        </div>
+
+        <h2 className="print-section-title">Sales Transactions Ledger</h2>
+        <table className="print-table">
+          <thead>
+            <tr>
+              <th>Invoice No</th>
+              <th>Date & Time</th>
+              <th>Customer Name</th>
+              <th>Customer Phone</th>
+              <th>Sold By</th>
+              <th>Payment Method</th>
+              <th>Final Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sales.length === 0 ? (
+              <tr>
+                <td colSpan="7" style={{ textAlign: 'center', padding: '20px' }}>No sales records found in history.</td>
+              </tr>
+            ) : (
+              sales.map((s) => (
+                <tr key={s.id || s.invoiceNumber}>
+                  <td>{s.invoiceNumber}</td>
+                  <td>{s.saleDate ? new Date(s.saleDate).toLocaleString('en-IN') : 'N/A'}</td>
+                  <td>{s.customerName || 'Walk-in Customer'}</td>
+                  <td>{s.customerPhone || 'N/A'}</td>
+                  <td>{s.createdByUsername || 'N/A'}</td>
+                  <td>{s.paymentMethod}</td>
+                  <td>{formatCurrency(s.finalAmount)}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    );
   };
 
   const renderInventorySummaryReport = () => {
@@ -471,6 +576,8 @@ const Reports = () => {
   const renderActivePrintReport = () => {
     if (!activePrintReport) return null;
     switch (activePrintReport) {
+      case 'SALES_REPORT':
+        return renderSalesReport();
       case 'INVENTORY_SUMMARY':
         return renderInventorySummaryReport();
       case 'LOW_STOCK':
@@ -488,6 +595,8 @@ const Reports = () => {
     return <div style={{ color: 'var(--text-secondary)' }}>Loading report metrics...</div>;
   }
 
+  const staffTotalRevenue = sales.reduce((acc, curr) => acc + (curr.finalAmount || 0), 0);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       
@@ -496,10 +605,12 @@ const Reports = () => {
         <div>
           <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <FileText size={22} style={{ color: 'var(--primary)' }} />
-            Reports & Analytical Export Center
+            {isStaff ? 'Staff Sales Report Center' : 'Reports & Analytical Export Center'}
           </h2>
           <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-            Generate, download CSV, and print PDF inventory compliance reports.
+            {isStaff 
+              ? 'View transaction metrics, export CSV sales reports, and print sales summaries.' 
+              : 'Generate, download CSV, and print PDF inventory compliance reports.'}
           </p>
         </div>
       </div>
@@ -572,6 +683,101 @@ const Reports = () => {
           );
         })}
       </div>
+
+      {/* Staff Interactive Sales Preview */}
+      {isStaff && (
+        <div className="card" style={{ padding: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'white', fontFamily: 'Outfit, sans-serif' }}>
+              Sales History Audit & Revenue Overview
+            </h3>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => handleExportCSV('SALES_REPORT')}
+                className="btn btn-primary"
+                style={{ height: '34px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Download size={14} />
+                <span>Export Sales CSV</span>
+              </button>
+              <button
+                onClick={() => setActivePrintReport('SALES_REPORT')}
+                className="btn btn-secondary"
+                style={{ height: '34px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Printer size={14} />
+                <span>Print Sales PDF</span>
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+            <div style={{ backgroundColor: 'var(--bg-subtle)', padding: '16px', borderRadius: 'var(--border-radius-md)', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Total Sales Count</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'white', marginTop: '4px' }}>{sales.length}</div>
+            </div>
+            <div style={{ backgroundColor: 'var(--bg-subtle)', padding: '16px', borderRadius: 'var(--border-radius-md)', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Total Sales Revenue</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--success)', marginTop: '4px' }}>{formatCurrency(staffTotalRevenue)}</div>
+            </div>
+          </div>
+
+          <div className="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>Invoice No</th>
+                  <th>Date & Time</th>
+                  <th>Customer Name</th>
+                  <th>Sold By</th>
+                  <th>Pay Mode</th>
+                  <th style={{ textAlign: 'right' }}>Total Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sales.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-secondary)' }}>
+                      No sales records available.
+                    </td>
+                  </tr>
+                ) : (
+                  sales.map((s) => (
+                    <tr key={s.id || s.invoiceNumber}>
+                      <td>
+                        <strong style={{ color: 'var(--primary)' }}>{s.invoiceNumber}</strong>
+                      </td>
+                      <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                        {s.saleDate ? new Date(s.saleDate).toLocaleString('en-IN') : 'N/A'}
+                      </td>
+                      <td>
+                        <span style={{ color: 'white', fontWeight: 500 }}>{s.customerName || 'Walk-in Customer'}</span>
+                        {s.customerPhone && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{s.customerPhone}</div>}
+                      </td>
+                      <td style={{ color: 'white' }}>{s.createdByUsername || 'N/A'}</td>
+                      <td>
+                        <span style={{
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          backgroundColor: s.paymentMethod === 'CASH' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                          color: s.paymentMethod === 'CASH' ? 'var(--warning)' : 'var(--primary)'
+                        }}>
+                          {s.paymentMethod}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--success)' }}>
+                        {formatCurrency(s.finalAmount)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Print Portal */}
       {activePrintReport && createPortal(

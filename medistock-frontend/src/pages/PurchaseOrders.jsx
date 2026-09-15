@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/api';
 import { useAuth } from '../context/AuthContext';
-import { 
-  Plus, 
-  Trash2, 
-  Search, 
-  X, 
-  Clipboard, 
-  Eye, 
-  Calendar, 
-  User, 
-  DollarSign, 
-  Edit, 
+import {
+  Plus,
+  Trash2,
+  Search,
+  X,
+  Clipboard,
+  Eye,
+  Calendar,
+  User,
+  DollarSign,
+  Edit,
   RotateCcw,
   CheckCircle,
   Clock,
@@ -24,7 +24,7 @@ const PurchaseOrders = () => {
   const [orders, setOrders] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [supplierMedicines, setSupplierMedicines] = useState([]);
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
@@ -34,10 +34,10 @@ const PurchaseOrders = () => {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
-  
+
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [newOrderStatus, setNewOrderStatus] = useState('');
-  
+
   // Create PO form states
   const [selectedSupplierId, setSelectedSupplierId] = useState('');
   const [lineItems, setLineItems] = useState([
@@ -137,18 +137,48 @@ const PurchaseOrders = () => {
     setLineItems(prev => prev.filter((_, idx) => idx !== index));
   };
 
+  const showToast = (message, type = 'danger') => {
+    const existingToasts = document.querySelectorAll('.po-toast-alert');
+    existingToasts.forEach(t => t.remove());
+
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type} po-toast-alert`;
+    toast.innerText = message;
+    toast.style.position = 'fixed';
+    toast.style.top = '20px';
+    toast.style.right = '20px';
+    toast.style.zIndex = '99999';
+    toast.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3500);
+  };
+
   const handleLineItemChange = (index, field, value) => {
     setLineItems(prev => prev.map((item, idx) => {
       if (idx !== index) return item;
-      
+
       const updated = { ...item, [field]: value };
-      
+
       if (field === 'supplierMedicineId') {
         const matchingMed = supplierMedicines.find(m => m.id.toString() === value.toString());
         if (matchingMed) {
           updated.unitPrice = matchingMed.price;
         }
       }
+
+      if (field === 'quantity') {
+        const valStr = value !== undefined && value !== null ? String(value).trim() : '';
+        const numVal = parseInt(valStr, 10);
+        if (valStr === '' || isNaN(numVal) || numVal < 1) {
+          const msg = "Quantity cannot be null or negative.";
+          setFormError(msg);
+          updated.quantity = 1;
+        } else {
+          updated.quantity = numVal;
+          setFormError('');
+        }
+      }
+
       return updated;
     }));
   };
@@ -160,9 +190,21 @@ const PurchaseOrders = () => {
       return;
     }
 
-    const invalidItem = lineItems.some(item => !item.supplierMedicineId || !item.quantity || item.quantity < 1 || !item.unitPrice);
+    const hasInvalidQuantity = lineItems.some(item => {
+      const valStr = item.quantity !== undefined && item.quantity !== null ? String(item.quantity).trim() : '';
+      const numVal = parseInt(valStr, 10);
+      return valStr === '' || isNaN(numVal) || numVal < 1;
+    });
+
+    if (hasInvalidQuantity) {
+      const msg = "Quantity cannot be null or negative.";
+      setFormError(msg);
+      return;
+    }
+
+    const invalidItem = lineItems.some(item => !item.supplierMedicineId || !item.unitPrice);
     if (invalidItem) {
-      setFormError('Please verify all items have a valid medicine selection, positive quantity, and price.');
+      setFormError('Please verify all items have a valid medicine selection and price.');
       return;
     }
 
@@ -173,7 +215,7 @@ const PurchaseOrders = () => {
       supplierId: parseInt(selectedSupplierId),
       items: lineItems.map(item => ({
         supplierMedicineId: parseInt(item.supplierMedicineId),
-        quantity: parseInt(item.quantity),
+        quantity: parseInt(item.quantity, 10),
         unitPrice: parseFloat(item.unitPrice)
       }))
     };
@@ -242,7 +284,7 @@ const PurchaseOrders = () => {
         if (selectedOrder?.id === orderId) {
           setSelectedOrder(response.data.data);
         }
-        
+
         // Show success toast
         const toast = document.createElement('div');
         toast.className = 'alert alert-success';
@@ -285,7 +327,14 @@ const PurchaseOrders = () => {
   };
 
   const calculateTotal = () => {
-    return lineItems.reduce((acc, item) => acc + (parseInt(item.quantity || 0) * parseFloat(item.unitPrice || 0)), 0);
+    for (const item of lineItems) {
+      const valStr = item.quantity !== undefined && item.quantity !== null ? String(item.quantity).trim() : '';
+      const numVal = parseInt(valStr, 10);
+      if (valStr === '' || isNaN(numVal) || numVal < 1) {
+        return 0;
+      }
+    }
+    return lineItems.reduce((acc, item) => acc + (parseInt(item.quantity, 10) * parseFloat(item.unitPrice || 0)), 0);
   };
 
   const getExpectedDeliveryDate = (orderDateStr) => {
@@ -300,9 +349,9 @@ const PurchaseOrders = () => {
   };
 
   const filteredOrders = orders.filter(o => {
-    const matchesSearch = o.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          o.supplier?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          o.createdByUsername?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = o.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      o.supplier?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      o.createdByUsername?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = !statusFilter || o.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -326,7 +375,7 @@ const PurchaseOrders = () => {
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-        
+
         {/* Header card */}
         <div className="card" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
           <div style={{
@@ -350,9 +399,9 @@ const PurchaseOrders = () => {
               View and track purchase orders received from MediStock.
             </p>
           </div>
-          <button 
-            className="btn-icon" 
-            onClick={fetchData} 
+          <button
+            className="btn-icon"
+            onClick={fetchData}
             title="Refresh Orders"
             style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)' }}
           >
@@ -419,8 +468,8 @@ const PurchaseOrders = () => {
             />
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
-            <select 
-              value={statusFilter} 
+            <select
+              value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               style={{ width: '160px', height: '42px' }}
             >
@@ -465,18 +514,17 @@ const PurchaseOrders = () => {
                         <td>{getExpectedDeliveryDate(order.orderDate)}</td>
                         <td style={{ fontWeight: 550 }}>{formatCurrency(order.totalAmount)}</td>
                         <td>
-                          <span className={`badge ${
-                            order.status === 'RECEIVED' ? 'badge-success' :
-                            order.status === 'APPROVED' || order.status === 'SHIPPED' ? 'badge-info' :
-                            order.status === 'CANCELLED' ? 'badge-danger' : 'badge-warning'
-                          }`} style={{ fontWeight: 600 }}>
+                          <span className={`badge ${order.status === 'RECEIVED' ? 'badge-success' :
+                              order.status === 'APPROVED' || order.status === 'SHIPPED' ? 'badge-info' :
+                                order.status === 'CANCELLED' ? 'badge-danger' : 'badge-warning'
+                            }`} style={{ fontWeight: 600 }}>
                             {order.status}
                           </span>
                         </td>
                         <td>
                           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                            <button 
-                              className="btn btn-secondary" 
+                            <button
+                              className="btn btn-secondary"
                               onClick={() => handleOpenDetails(order)}
                               style={{ padding: '6px 14px', fontSize: '0.85rem', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
                             >
@@ -515,14 +563,14 @@ const PurchaseOrders = () => {
               {formError && <div className="alert alert-danger" style={{ marginTop: '16px' }}>{formError}</div>}
 
               {/* Order Stats / Meta details */}
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: '1fr 1fr', 
-                gap: '16px 24px', 
-                margin: '20px 0', 
-                background: 'rgba(255,255,255,0.02)', 
-                padding: '16px', 
-                borderRadius: '10px', 
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '16px 24px',
+                margin: '20px 0',
+                background: 'rgba(255,255,255,0.02)',
+                padding: '16px',
+                borderRadius: '10px',
                 border: '1px solid var(--border-color)',
                 fontSize: '0.85rem'
               }}>
@@ -533,11 +581,10 @@ const PurchaseOrders = () => {
                 <div>
                   <div style={{ color: 'var(--text-secondary)', marginBottom: '3px' }}>STATUS</div>
                   <div>
-                    <span className={`badge ${
-                      selectedOrder.status === 'RECEIVED' ? 'badge-success' :
-                      selectedOrder.status === 'APPROVED' || selectedOrder.status === 'SHIPPED' ? 'badge-info' :
-                      selectedOrder.status === 'CANCELLED' ? 'badge-danger' : 'badge-warning'
-                    }`} style={{ fontWeight: 600 }}>
+                    <span className={`badge ${selectedOrder.status === 'RECEIVED' ? 'badge-success' :
+                        selectedOrder.status === 'APPROVED' || selectedOrder.status === 'SHIPPED' ? 'badge-info' :
+                          selectedOrder.status === 'CANCELLED' ? 'badge-danger' : 'badge-warning'
+                      }`} style={{ fontWeight: 600 }}>
                       {selectedOrder.status}
                     </span>
                   </div>
@@ -587,15 +634,15 @@ const PurchaseOrders = () => {
               </div>
 
               {/* Total block */}
-              <div style={{ 
-                marginTop: '16px', 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center', 
-                background: 'rgba(59, 130, 246, 0.08)', 
-                border: '1px solid rgba(59, 130, 246, 0.25)', 
-                padding: '12px 18px', 
-                borderRadius: '8px' 
+              <div style={{
+                marginTop: '16px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                background: 'rgba(59, 130, 246, 0.08)',
+                border: '1px solid rgba(59, 130, 246, 0.25)',
+                padding: '12px 18px',
+                borderRadius: '8px'
               }}>
                 <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>TOTAL PURCHASE VALUE:</span>
                 <strong style={{ fontSize: '1.25rem', color: 'var(--primary)', fontFamily: 'Outfit' }}>
@@ -608,7 +655,7 @@ const PurchaseOrders = () => {
                 <div style={{ display: 'flex', gap: '8px' }}>
                   {selectedOrder.status === 'PENDING' && (
                     <>
-                      <button 
+                      <button
                         className="btn btn-primary"
                         onClick={() => handleUpdateStatusDirect(selectedOrder.id, 'APPROVED')}
                         disabled={submitting}
@@ -616,13 +663,13 @@ const PurchaseOrders = () => {
                       >
                         {submitting ? 'Approving...' : 'Approve PO'}
                       </button>
-                      <button 
+                      <button
                         className="btn btn-danger"
                         onClick={() => handleUpdateStatusDirect(selectedOrder.id, 'CANCELLED')}
                         disabled={submitting}
-                        style={{ 
-                          padding: '8px 16px', 
-                          borderRadius: '8px', 
+                        style={{
+                          padding: '8px 16px',
+                          borderRadius: '8px',
                           cursor: 'pointer',
                           background: 'none',
                           border: '1px solid var(--danger)',
@@ -636,7 +683,7 @@ const PurchaseOrders = () => {
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <button 
+                  <button
                     className="btn btn-secondary"
                     onClick={() => alert(`Downloading PDF invoice document for ${selectedOrder.orderNumber}...`)}
                     style={{ padding: '8px 16px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
@@ -670,8 +717,8 @@ const PurchaseOrders = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '10px' }}>
-          <select 
-            value={statusFilter} 
+          <select
+            value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             style={{ width: '160px', height: '42px' }}
           >
@@ -722,25 +769,24 @@ const PurchaseOrders = () => {
                       <td>{formattedDate}</td>
                       <td style={{ fontWeight: 550 }}>{formatCurrency(order.totalAmount)}</td>
                       <td>
-                        <span className={`badge ${
-                          order.status === 'COMPLETED' || order.status === 'RECEIVED' ? 'badge-success' :
-                          order.status === 'CANCELLED' ? 'badge-danger' : 'badge-warning'
-                        }`}>
+                        <span className={`badge ${order.status === 'COMPLETED' || order.status === 'RECEIVED' ? 'badge-success' :
+                            order.status === 'CANCELLED' ? 'badge-danger' : 'badge-warning'
+                          }`}>
                           {order.status}
                         </span>
                       </td>
                       <td>
                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                          <button 
-                            className="btn-icon view" 
+                          <button
+                            className="btn-icon view"
                             onClick={() => handleOpenDetails(order)}
                             title="View Details"
                           >
                             <Eye size={14} />
                           </button>
                           {(isAdminOrPharmacist || isSupplier) && (
-                            <button 
-                              className="btn-icon edit" 
+                            <button
+                              className="btn-icon edit"
                               onClick={() => handleOpenStatusModal(order)}
                               title="Update Status"
                             >
@@ -748,8 +794,8 @@ const PurchaseOrders = () => {
                             </button>
                           )}
                           {isAdminOrPharmacist && (
-                            <button 
-                              className="btn-icon delete" 
+                            <button
+                              className="btn-icon delete"
                               onClick={() => handleDelete(order.id, order.orderNumber)}
                               title="Delete Order"
                             >
@@ -825,8 +871,18 @@ const PurchaseOrders = () => {
                       type="number"
                       placeholder="Qty"
                       value={item.quantity}
-                      onChange={(e) => handleLineItemChange(idx, 'quantity', parseInt(e.target.value) || 1)}
-                      min="1"
+                      onChange={(e) => handleLineItemChange(idx, 'quantity', e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'ArrowDown') {
+                          const currentVal = parseInt(item.quantity, 10);
+                          if (isNaN(currentVal) || currentVal <= 1) {
+                            e.preventDefault();
+                            const msg = "Quantity cannot be null or negative.";
+                            setFormError(msg);
+                            handleLineItemChange(idx, 'quantity', 1);
+                          }
+                        }
+                      }}
                       required
                       disabled={submitting}
                     />
@@ -843,8 +899,8 @@ const PurchaseOrders = () => {
                       required
                     />
 
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       onClick={() => handleRemoveLineItem(idx)}
                       style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--danger)' }}
                       disabled={lineItems.length === 1 || submitting}
@@ -898,10 +954,9 @@ const PurchaseOrders = () => {
               <div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Order Status</div>
                 <div style={{ marginTop: '4px' }}>
-                  <span className={`badge ${
-                    selectedOrder.status === 'COMPLETED' || selectedOrder.status === 'RECEIVED' ? 'badge-success' :
-                    selectedOrder.status === 'CANCELLED' ? 'badge-danger' : 'badge-warning'
-                  }`}>
+                  <span className={`badge ${selectedOrder.status === 'COMPLETED' || selectedOrder.status === 'RECEIVED' ? 'badge-success' :
+                      selectedOrder.status === 'CANCELLED' ? 'badge-danger' : 'badge-warning'
+                    }`}>
                     {selectedOrder.status}
                   </span>
                 </div>
@@ -953,9 +1008,9 @@ const PurchaseOrders = () => {
 
             <div className="modal-footer" style={{ marginTop: '20px' }}>
               {(isAdminOrPharmacist || isSupplier) && (
-                <button 
-                  type="button" 
-                  className="btn btn-primary" 
+                <button
+                  type="button"
+                  className="btn btn-primary"
                   onClick={() => {
                     setDetailModalOpen(false);
                     handleOpenStatusModal(selectedOrder);

@@ -148,7 +148,7 @@ const Layout = () => {
       path: '/purchase-orders',
       label: 'Purchase Orders',
       icon: <ClipboardList size={18} />,
-      roles: ['ROLE_ADMIN', 'ROLE_PHARMACIST', 'ROLE_SUPPLIER', 'ROLE_STAFF']
+      roles: ['ROLE_ADMIN', 'ROLE_PHARMACIST', 'ROLE_SUPPLIER']
     },
     {
       path: '/billing',
