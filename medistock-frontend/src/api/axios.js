@@ -1,10 +1,17 @@
 import axios from 'axios';
 import { storage } from '../utils/storage';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081/api';
+const getBaseUrl = () => {
+  const rawUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081/api';
+  const trimmed = rawUrl.trim().replace(/\/+$/, '');
+  if (trimmed === '/api' || trimmed.endsWith('/api')) {
+    return trimmed;
+  }
+  return `${trimmed}/api`;
+};
 
 const axiosInstance = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: getBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
   },
