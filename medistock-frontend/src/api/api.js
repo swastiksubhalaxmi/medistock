@@ -1,8 +1,17 @@
 import axios from 'axios';
 
+const getBaseUrl = () => {
+  const rawUrl = import.meta.env.VITE_API_BASE_URL || '/api';
+  const trimmed = rawUrl.trim().replace(/\/+$/, '');
+  if (trimmed === '/api' || trimmed.endsWith('/api')) {
+    return trimmed;
+  }
+  return `${trimmed}/api`;
+};
+
 // Create an Axios instance pointing to the proxied back-end URL
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
+  baseURL: getBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
   },
