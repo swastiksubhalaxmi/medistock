@@ -79,8 +79,11 @@ const Layout = () => {
     setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
   };
 
+  const isFetchingNotificationsRef = useRef(false);
+
   const fetchUnreadCount = async () => {
-    if (!user) return;
+    if (!user || isFetchingNotificationsRef.current) return;
+    isFetchingNotificationsRef.current = true;
     try {
       const res = await api.get('/notifications');
       if (res.data.success && Array.isArray(res.data.data)) {
@@ -92,14 +95,16 @@ const Layout = () => {
       }
     } catch (err) {
       console.error('Error fetching unread notification count:', err);
+    } finally {
+      isFetchingNotificationsRef.current = false;
     }
   };
 
   useEffect(() => {
     fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 15000); // auto-refresh every 15s
+    const interval = setInterval(fetchUnreadCount, 60000); // auto-refresh every 60s
     return () => clearInterval(interval);
-  }, [user, location.pathname]);
+  }, [user?.id, user?.username]);
 
   const menuItems = [
     {
