@@ -124,7 +124,8 @@ public class MedicineServiceImpl implements MedicineService {
                 nearExpiryDate,
                 pageable
             );
-            return page.map(this::mapToResponse);
+            java.util.Map<String, SupplierMedicine> supplierMedMap = buildSupplierMedicineMap();
+            return page.map(m -> mapToResponseWithMap(m, supplierMedMap));
         }
     }
 
@@ -158,8 +159,9 @@ public class MedicineServiceImpl implements MedicineService {
                 today,
                 nearExpiryDate
             );
+            java.util.Map<String, SupplierMedicine> supplierMedMap = buildSupplierMedicineMap();
             return list.stream()
-                    .map(this::mapToResponse)
+                    .map(m -> mapToResponseWithMap(m, supplierMedMap))
                     .collect(Collectors.toList());
         }
     }
@@ -410,7 +412,22 @@ public class MedicineServiceImpl implements MedicineService {
         return statuses;
     }
 
+    private java.util.Map<String, SupplierMedicine> buildSupplierMedicineMap() {
+        List<SupplierMedicine> allSm = supplierMedicineRepository.findAll();
+        return allSm.stream()
+                .filter(sm -> sm.getSupplier() != null && sm.getSupplier().getId() != null && sm.getCode() != null)
+                .collect(Collectors.toMap(
+                        sm -> sm.getSupplier().getId() + ":" + sm.getCode(),
+                        sm -> sm,
+                        (existing, replacement) -> existing
+                ));
+    }
+
     private MedicineResponse mapToResponse(Medicine medicine) {
+        return mapToResponseWithMap(medicine, null);
+    }
+
+    private MedicineResponse mapToResponseWithMap(Medicine medicine, java.util.Map<String, SupplierMedicine> supplierMedMap) {
         CategoryDto categoryDto = medicine.getCategory() != null ?
                 CategoryDto.builder()
                         .id(medicine.getCategory().getId())
@@ -434,10 +451,17 @@ public class MedicineServiceImpl implements MedicineService {
         Integer supplierQty = 0;
         BigDecimal supplierBuyingPrice = null;
         if (medicine.getSupplier() != null && medicine.getCode() != null) {
-            Optional<SupplierMedicine> smOpt = supplierMedicineRepository
-                    .findBySupplierIdAndCode(medicine.getSupplier().getId(), medicine.getCode());
-            if (smOpt.isPresent()) {
-                SupplierMedicine sm = smOpt.get();
+            SupplierMedicine sm = null;
+            if (supplierMedMap != null) {
+                sm = supplierMedMap.get(medicine.getSupplier().getId() + ":" + medicine.getCode());
+            } else {
+                Optional<SupplierMedicine> smOpt = supplierMedicineRepository
+                        .findBySupplierIdAndCode(medicine.getSupplier().getId(), medicine.getCode());
+                if (smOpt.isPresent()) {
+                    sm = smOpt.get();
+                }
+            }
+            if (sm != null) {
                 supplierQty = sm.getAvailableQuantity() != null ? sm.getAvailableQuantity() : 0;
                 supplierBuyingPrice = sm.getPrice();
             }

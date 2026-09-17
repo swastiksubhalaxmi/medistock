@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -169,6 +170,16 @@ public class NotificationServiceImpl implements NotificationService {
         LocalDate nearExpiryDate = today.plusDays(nearExpiryDays);
         Set<String> processedCodes = new HashSet<>();
 
+        // Pre-fetch all medicines into memory once to eliminate N+1 queries inside the loop
+        List<Medicine> allMedicines = medicineRepository.findAll();
+        java.util.Map<String, Medicine> medicineByCodeMap = allMedicines.stream()
+                .filter(m -> m.getCode() != null)
+                .collect(Collectors.toMap(
+                        Medicine::getCode,
+                        m -> m,
+                        (existing, replacement) -> existing
+                ));
+
         // 1. Process all supplier-specific inventory records (covers multiple suppliers per medicine formulation)
         List<SupplierMedicine> supplierMedicines = supplierMedicineRepository.findAll();
         for (SupplierMedicine sm : supplierMedicines) {
@@ -182,11 +193,11 @@ public class NotificationServiceImpl implements NotificationService {
 
             int qty = 0;
             if (sm.getCode() != null) {
-                java.util.Optional<Medicine> medOpt = medicineRepository.findByCode(sm.getCode());
-                if (medOpt.isPresent() && medOpt.get().getInventory() != null && medOpt.get().getInventory().getQuantity() != null) {
-                    qty = medOpt.get().getInventory().getQuantity();
-                    if (medOpt.get().getInventory().getReorderLevel() != null) {
-                        reorder = medOpt.get().getInventory().getReorderLevel();
+                Medicine med = medicineByCodeMap.get(sm.getCode());
+                if (med != null && med.getInventory() != null && med.getInventory().getQuantity() != null) {
+                    qty = med.getInventory().getQuantity();
+                    if (med.getInventory().getReorderLevel() != null) {
+                        reorder = med.getInventory().getReorderLevel();
                     }
                 } else if (sm.getAvailableQuantity() != null) {
                     qty = sm.getAvailableQuantity();
@@ -269,8 +280,7 @@ public class NotificationServiceImpl implements NotificationService {
         }
 
         // 2. Process any main pharmacy medicine inventory records not covered in SupplierMedicine
-        List<Medicine> medicines = medicineRepository.findAll();
-        for (Medicine med : medicines) {
+        for (Medicine med : allMedicines) {
             if (med.getCode() != null && processedCodes.contains(med.getCode())) {
                 continue; // Already processed via SupplierMedicine
             }
