@@ -23,6 +23,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final UserDetailsServiceImpl userDetailsService;
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
+        return "OPTIONS".equalsIgnoreCase(request.getMethod()) || org.springframework.web.cors.CorsUtils.isPreFlightRequest(request);
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         try {
